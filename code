@@ -1,0 +1,193 @@
+#include <HTTPClient.h>
+#include <WiFi.h>
+#include <ArduinoJson.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SoftwareSerial.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+SoftwareSerial gsm(26, 27);  // RX, TX (Connect GSM TX -> 26, GSM RX -> 27)
+
+int voltage = 35;
+int voltage2 = 32;
+int temp = 33;
+int b = 25;
+float k, k1, k2;
+String sensor1_status;
+String sensor2_status;
+String sensor3_status;
+String sensor4_status;
+String sensor5_status;
+String sensor6_status;
+String sensor7_status;
+String sensor8_status;
+String sms_status;
+
+int load1_gpio = 2;
+int load2_gpio = 4;
+int load3_gpio = 5;
+int load4_gpio = 18;
+int u;
+bool smsSent = false;  // prevent multiple SMS per loop
+
+void setup() {
+  Serial.begin(115200);
+  gsm.begin(9600);
+  lcd.init();
+  lcd.backlight();
+  pinMode(voltage, INPUT);
+  pinMode(voltage2, INPUT);
+  pinMode(temp, INPUT);
+  pinMode(b, OUTPUT);
+  pinMode(load1_gpio, OUTPUT);
+  pinMode(load2_gpio, OUTPUT);
+  pinMode(load3_gpio, OUTPUT);
+  pinMode(load4_gpio, OUTPUT);
+  pinMode(25, OUTPUT);
+  digitalWrite(load1_gpio, LOW);
+  digitalWrite(load2_gpio, LOW);
+  digitalWrite(load3_gpio, LOW);
+  digitalWrite(load4_gpio, LOW);
+
+  WiFi.begin("iotbegin056", "iotbegin056");
+  while (WiFi.status() != WL_CONNECTED) {
+    lcd.setCursor(0, 0);
+    lcd.print("connect to WIFI    ");
+    lcd.setCursor(0, 1);
+    lcd.print("  iotbegin056");
+    Serial.println("Waiting for Wi-Fi connection");
+    delay(500);
+  }
+
+  delay(1000);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("SOLAR PANEL ");
+  lcd.setCursor(2, 1);
+  lcd.print(" MONITORING  ");
+  delay(3000);
+  lcd.clear();
+
+  // Initialize GSM
+}
+
+void loop() {
+   iot1();
+  float V = analogRead(voltage) / 205.00;
+ 
+
+  float V = analogRead(voltage1) / 205.00;
+  int T = analogRead(temp) / 120;
+
+ 
+  Serial.print(u);
+    Serial.println(u);
+  
+
+  lcd.setCursor(0, 0);
+  lcd.print("V:");
+  lcd.print(V);
+  lcd.print("  ");
+  lcd.setCursor(8, 0);
+  lcd.print("I:");
+  lcd.print(c);
+  lcd.print("  ");
+ 
+  k = k1 + k2;
+ 
+  lcd.setCursor(0, 1);
+  lcd.print("VL:");
+  lcd.print(v2);
+  lcd.print("  ");
+  lcd.setCursor(8, 1);
+  lcd.print("IL:");
+  lcd.print(k);
+  lcd.print("  ");
+
+
+
+  sensor1_status = "V: " + String(V);
+  sensor2_status = "I: " + String(c);
+
+
+  sensor3_status = "V: " + String(v2);
+  sensor4_status = "I: " + String(k);
+
+  if (T >= 35) {
+    sensor5_status = "T: " + String(T) + " TEMPERATURE HIGH";
+
+  } else {
+    sensor5_status = "T: " + String(T);
+  }
+
+  delay(1000);
+  iot();
+}
+
+
+void iot() {
+  DynamicJsonDocument jsonBuffer(JSON_OBJECT_SIZE(3) + 300);
+  JsonObject root = jsonBuffer.to<JsonObject>();
+  root["sensor1"] = sensor1_status;
+  root["sensor2"] = sensor2_status;
+  root["sensor3"] = sensor3_status;
+  root["sensor4"] = sensor4_status;
+  root["sensor5"] = sensor5_status;
+  root["sensor6"] = sensor6_status;
+  root["sensor7"] = sensor7_status;
+  root["sensor8"] = sensor8_status;
+  root["sms"] = sms_status;
+  String json;
+  serializeJson(jsonBuffer, json);
+
+  if (sensor1_status != "null") {
+    HTTPClient http;
+    http.begin("http://iotbegineer.com/api/sensors");
+    http.addHeader("username", "iotbegin056");
+    http.addHeader("Content-Type", "application/json");
+    int httpCode = http.POST(json);
+    String payload = http.getString();
+    http.end();
+  }
+}
+
+void iot1() {
+  HTTPClient http;                                   //Declare object of class HTTPClient
+  http.begin("http://iotbegineer.com/api/devices");  //Specify request destination
+  http.addHeader("username", "iotbegin056");         //Specify content-type header
+  int httpCode = http.GET();
+  String payload = http.getString();  //Get the response payload
+  //Serial.println(httpCode);   //Print HTTP return code
+  //Serial.println(payload);    //Print request response payload
+  http.end();  //Close connection
+               // delay(500);
+  StaticJsonDocument<300> parseload;
+  deserializeJson(parseload, payload);
+  //Serial.println();
+  JsonObject load_data = parseload["data"];
+  String device1_status = load_data["device1"];
+  String device2_status = load_data["device2"];
+  String device3_status = load_data["device3"];
+  String device4_status = load_data["device4"];
+
+  if ((device1_status == "1")) {
+    digitalWrite(load1_gpio, HIGH);
+    digitalWrite(load2_gpio, LOW);
+    
+  }
+  if ((device1_status == "0")) {
+    digitalWrite(load1_gpio, LOW);
+    digitalWrite(load2_gpio, LOW);
+   }
+  if ((device2_status == "1") && (u == 1)) {
+
+    digitalWrite(load3_gpio, HIGH);
+    digitalWrite(load4_gpio, LOW);
+ 
+  }
+  if ((device2_status == "0")||(u == 0)) {
+
+    digitalWrite(load3_gpio, LOW);
+    digitalWrite(load4_gpio, LOW); 
+  }
+}
